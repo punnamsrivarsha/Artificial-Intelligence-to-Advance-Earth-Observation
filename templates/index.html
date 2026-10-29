@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sentinel-2 Auto-Simulator</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 40px; background: #0e1117; color: #ffffff; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: #1a1c23; padding: 20px; border-radius: 12px; border: 1px solid #30363d; }
+        .status-bar { height: 8px; background: #30363d; border-radius: 4px; overflow: hidden; margin: 10px 0; }
+        #progress { width: 0%; height: 100%; background: #238636; transition: width 0.3s; }
+        select, button { padding: 12px; margin: 5px 0; border-radius: 6px; width: 100%; box-sizing: border-box; }
+        button { cursor: pointer; background: #238636; color: white; border: none; font-weight: bold; }
+        button.stop { background: #da3633; }
+        #log { background: #000; color: #00ff41; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; height: 300px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
+        .metric-val { font-size: 24px; color: #58a6ff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>🛰️ Sentinel-2 Auto-Simulator</h2>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Configuration</h3>
+            <label>Model Architecture</label>
+            <select id="modelSelect">
+                <option value="unet">U-Net (ResNet50 Backbone)</option>
+                <option value="swin">Swin Transformer-T</option>
+                <option value="dinov2">DINOv2 + Linear Head</option>
+            </select>
+            <button id="simBtn" onclick="toggleSimulation()">Start Auto-Simulation</button>
+            
+            <div style="margin-top: 20px;">
+                <p>Training Progress</p>
+                <div class="status-bar"><div id="progress"></div></div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Loss: <span id="lossVal" class="metric-val">--</span></span>
+                    <span>mIoU: <span id="miouVal" class="metric-val">--</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Real-time Engine Logs</h3>
+            <div id="log">Engine idle...</div>
+        </div>
+    </div>
+
+    <script>
+        let isSimulating = false;
+        let simInterval;
+
+        async function toggleSimulation() {
+            const btn = document.getElementById('simBtn');
+            const log = document.getElementById('log');
+            
+            if (!isSimulating) {
+                isSimulating = true;
+                btn.innerText = "Stop Simulation";
+                btn.className = "stop";
+                log.innerHTML = "> Initializing Weights...<br>> Loading Sentinel-2 Dataset...";
+                startPolling();
+            } else {
+                isSimulating = false;
+                btn.innerText = "Start Auto-Simulation";
+                btn.className = "";
+                clearInterval(simInterval);
+                log.innerHTML += "<br>> Simulation Terminated.";
+            }
+        }
+
+        function startPolling() {
+            let step = 0;
+            simInterval = setInterval(async () => {
+                step++;
+                const model = document.getElementById('modelSelect').value;
+                
+                try {
+                    // In a real app, this fetches from your Flask Trainer state
+                    const response = await fetch('/simulate_step', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ step: step, model: model })
+                    });
+                    const data = await response.json();
+
+                    // Update UI
+                    document.getElementById('progress').style.width = `${data.progress}%`;
+                    document.getElementById('lossVal').innerText = data.loss.toFixed(4);
+                    document.getElementById('miouVal').innerText = data.miou.toFixed(2);
+                    
+                    const log = document.getElementById('log');
+                    log.innerHTML += `<br>[Step ${step}] Epoch ${data.epoch}: Loss=${data.loss.toFixed(4)} | mIoU=${data.miou}`;
+                    log.scrollTop = log.scrollHeight;
+
+                    if (data.progress >= 100) toggleSimulation();
+
+                } catch (err) {
+                    console.error("Simulation error", err);
+                }
+            }, 1000); // Polling every second
+        }
+    </script>
+</body>
+</html>

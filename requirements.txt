@@ -1,0 +1,8 @@
+flask
+torch
+torchvision
+numpy
+segmentation-models-pytorch
+timm
+transformers
+scikit-learn
